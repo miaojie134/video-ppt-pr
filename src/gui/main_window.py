@@ -166,40 +166,101 @@ class MainWindow(QMainWindow):
 
     def detection_finished(self, results):
         self.detection_results = results
-        self.display_results()
+        
+        # 统计检测结果
+        total_changes = len(results)
+        sudden_changes = sum(1 for r in results if r.get('type') == 'sudden')
+        static_changes = sum(1 for r in results if r.get('type') == 'static')
+        
+        # 计算视频总时长
+        if results:
+            last_time = results[-1]['time'].total_seconds()
+            hours = int(last_time // 3600)
+            minutes = int((last_time % 3600) // 60)
+            seconds = int(last_time % 60)
+            duration_str = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+            
+            # 计算平均间隔
+            avg_interval = last_time / (total_changes - 1) if total_changes > 1 else 0
+            avg_minutes = int(avg_interval // 60)
+            avg_seconds = int(avg_interval % 60)
+        
+        # 显示检测结果
+        self.result_text.clear()
+        self.result_text.append("🎉 检测完成！\n")
+        self.result_text.append("📊 统计信息:")
+        self.result_text.append(f"• 视频总时长: {duration_str}")
+        self.result_text.append(f"• 检测到幻灯片变化: {total_changes} 处")
+        self.result_text.append(f"  - 快速切换: {sudden_changes} 处")
+        self.result_text.append(f"  - 渐变过渡: {static_changes} 处")
+        if total_changes > 1:
+            self.result_text.append(f"• 平均幻灯片停留时间: {avg_minutes}分{avg_seconds}秒\n")
+        
+        self.result_text.append("⏱️ 详细时间点:")
+        
+        # 显示每个变化点的详细信息
+        for i, change in enumerate(results, 1):
+            time_str = change['time'].strftime("%H:%M:%S.%f")[:-4]
+            change_type = "快速切换" if change.get('type') == 'sudden' else "渐变过渡"
+            
+            # 获取更多变化细节
+            details = []
+            if 'mean_magnitude' in change:
+                if change['mean_magnitude'] > 1.5:
+                    details.append("大幅变化")
+                elif change['mean_magnitude'] > 0.8:
+                    details.append("中等变化")
+                else:
+                    details.append("轻微变化")
+                
+            if 'is_lecturer_motion' in change and change['is_lecturer_motion']:
+                details.append("讲师活动")
+            
+            detail_str = f"({', '.join(details)})" if details else ""
+            
+            self.result_text.append(f"{i}. {time_str} - {change_type} {detail_str}")
+        
         self.start_button.setEnabled(True)
         self.stop_button.setEnabled(False)
         self.progress_bar.setValue(100)
         self.status_label.setText("检测完成")
 
-        # 自动导出CSV和XML
+        # 自动导出文件
         try:
-            # 生成输出文件路径
             video_dir = os.path.dirname(self.video_path)
             base_name = os.path.splitext(os.path.basename(self.video_path))[0]
 
-            # 导出CSV
+            # 导出CSV和XML
             csv_path = os.path.join(video_dir, f"{base_name}_markers.csv")
-            from ..exporters.csv_exporter import export_pr_markers
-
-            csv_file = export_pr_markers(
-                self.detection_results, self.video_path, csv_path
-            )
-
-            # 导出XML
             xml_path = os.path.join(video_dir, f"{base_name}.xml")
+            
+            from ..exporters.csv_exporter import export_pr_markers
             from ..exporters.xml_exporter import export_to_fcpxml
-
-            xml_file = export_to_fcpxml(
-                self.detection_results, self.video_path, xml_path
-            )
+            
+            csv_file = export_pr_markers(self.detection_results, self.video_path, csv_path)
+            xml_file = export_to_fcpxml(self.detection_results, self.video_path, xml_path)
 
             # 显示导出结果
-            export_msg = "检测完成！已自动导出到:\n"
+            export_msg = "✨ 检测完成！\n\n"
+            export_msg += "📁 导出文件:\n"
             if csv_file:
-                export_msg += f"CSV标记文件: {csv_file}\n"
+                export_msg += f"• CSV标记文件: {csv_file}\n"
             if xml_file:
-                export_msg += f"XML序列文件: {xml_file}"
+                export_msg += f"• XML序列文件: {xml_file}\n\n"
+            
+            export_msg += "📊 检测统计:\n"
+            export_msg += f"• 视频时长: {duration_str}\n"
+            export_msg += f"• 总计检测到 {total_changes} 处变化\n"
+            export_msg += f"  - 快速切换: {sudden_changes} 处\n"
+            export_msg += f"  - 渐变过渡: {static_changes} 处\n"
+            if total_changes > 1:
+                export_msg += f"• 平均间隔: {avg_minutes}分{avg_seconds}秒\n\n"
+            
+            export_msg += "💡 提示:\n"
+            export_msg += "1. 在PR中先导入视频文件\n"
+            export_msg += "2. 然后导入XML文件\n"
+            export_msg += "3. 如果提示视频脱机，请手动重新链接"
+            
             QMessageBox.information(self, "检测和导出完成", export_msg)
 
         except Exception as e:
@@ -211,17 +272,6 @@ class MainWindow(QMainWindow):
         self.start_button.setEnabled(True)
         self.stop_button.setEnabled(False)
         self.progress_bar.setValue(0)
-
-    def display_results(self):
-        if not self.detection_results:
-            return
-
-        self.result_text.clear()
-        self.result_text.append("检测结果:")
-        for i, change in enumerate(self.detection_results, 1):
-            self.result_text.append(
-                f"{i}. 时间点: {change['time']} - 类型: {change['type']}"
-            )
 
     def update_status(self, message):
         # 检查是否是检测到变化的消息

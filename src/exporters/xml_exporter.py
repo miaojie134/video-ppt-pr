@@ -114,12 +114,21 @@ def export_to_fcpxml(timestamps, video_path, output_file=None):
         file_name.text = os.path.basename(video_path)
         pathurl = ET.SubElement(file, "pathurl")
 
-        # 使用绝对路径，移除localhost
-        abs_path = os.path.abspath(video_path).replace("\\", "/")
-        # 确保路径以正斜杠开始
-        if not abs_path.startswith("/"):
-            abs_path = "/" + abs_path
-        pathurl.text = f"file://{abs_path}"
+        # 修改pathurl的生成逻辑
+        # Windows 格式的路径处理
+        if os.name == 'nt':
+            # 转换为Windows格式的文件URL
+            abs_path = os.path.abspath(video_path)
+            # 确保使用正斜杠
+            abs_path = abs_path.replace("\\", "/")
+            # 添加额外的斜杠使其成为合法的file URL
+            if not abs_path.startswith("/"):
+                abs_path = "/" + abs_path
+            pathurl.text = f"file://localhost{abs_path}"
+        else:
+            # macOS/Linux 格式的路径处理
+            abs_path = os.path.abspath(video_path)
+            pathurl.text = f"file://localhost{abs_path}"
 
         # 添加文件帧率
         file_rate = ET.SubElement(file, "rate")
