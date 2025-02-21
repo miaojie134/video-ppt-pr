@@ -1,0 +1,19 @@
+# Python基础
+__pycache__/
+*.py[cod]
+dist/
+build/
+
+# 虚拟环境
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+
+# 系统文件
+.DS_Store
+
+# 项目特定
+/target
